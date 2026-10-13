@@ -1,0 +1,9 @@
+# Laboratorio 02 · punto 3.3 — Configurar Dependabot
+# Copiar este archivo a:  <repo>/.github/dependabot.yml   (la carpeta .github hay que crearla a mano)
+# Luego:  git add .github && git commit -m "add dependabot" && git push
+version: 2
+updates:
+  - package-ecosystem: "npm"   # ecosistema de paquetes (JavaScript / Node.js)
+    directory: "/"             # desde dónde escanear: raíz del repositorio
+    schedule:
+      interval: "weekly"       # frecuencia del escaneo (daily | weekly | monthly)
