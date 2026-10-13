@@ -1,4 +1,4 @@
-FROM node:20-alpine3.18 AS base
+FROM node:26-alpine3.24 AS base
 
 WORKDIR /app
 
@@ -14,13 +14,15 @@ RUN npm install
 RUN npm prune --production && node-prune
 
 #----------------RELEASE-----------------
-FROM node:20-alpine3.18 AS release
+FROM node:26-alpine3.24 AS release
 RUN apk add dumb-init
 
-COPY --from=builder /app/ ./
+COPY --chown=node:node --from=builder /app/ ./
 
 ARG APP_ENV
 ENV APP_ENV=${APP_ENV}
+
+USER node
 
 EXPOSE 3000
 
