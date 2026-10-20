@@ -10,8 +10,37 @@ env:
   IMAGE_NAME: rest_api
 
 jobs:
+  # Fallar a tiempo: primero las pruebas (baratas y rápidas),
+  # y solo si pasan se construye y publica la imagen.
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Test succeeded?
+        if: ${{ success() }}
+        run: echo "Test Succeeded!!!"
+
+      - name: Test failed?
+        if: ${{ failure() }}
+        run: echo "${{ env.IMAGE_NAME }} test failed"
+
   build:
     name: Build Image
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -32,27 +61,3 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           build-args: |
             APP_ENV=${{ secrets.APP_ENV }}
-
-  test:
-    name: Run tests
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - run: npm install
-      - run: npm run test
-
-      - name: Test succeeded?
-        if: ${{ success() }}
-        run: echo "Test Succeeded!!!"
-
-      - name: Test failed?
-        if: ${{ failure() }}
-        run: echo "${{ env.IMAGE_NAME }} test failed"
