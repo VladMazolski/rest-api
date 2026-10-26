@@ -82,6 +82,15 @@ router.get('/random_crash', (req, res) => {
   res.send({ app: config.APP_NAME, env: config.NODE_ENV, port: config.NODE_PORT, version: config.APP_VERSION, sticky, random_crash: num })
 })
 
+// ATENCIÓN: ruta INTENCIONALMENTE vulnerable a XSS (laboratorio 06 - SAST/DAST).
+// No usar en producción; se corrige con: res.send({ query })
+router.get('/search', (req, res) => {
+  const query = req.query.q
+
+  // Vulnerable rendering
+  res.send(`<h1>Search Results for: ${query}</h1>`)
+})
+
 app.use(router)
 app.use(errorHandlers)
 
