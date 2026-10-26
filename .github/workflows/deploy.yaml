@@ -10,8 +10,8 @@ env:
   IMAGE_NAME: rest_api
 
 jobs:
-  # Fallar a tiempo: primero las pruebas (baratas y rápidas),
-  # y solo si pasan se construye y publica la imagen.
+  # Fallar a tiempo: primero las pruebas (baratas y rápidas).
+  # YAML no es imperativo: el orden real lo define "needs", no la posición en el archivo.
   test:
     name: Run tests
     runs-on: ubuntu-latest
@@ -38,6 +38,7 @@ jobs:
         if: ${{ failure() }}
         run: echo "${{ env.IMAGE_NAME }} test failed"
 
+  # Solo si pasan las pruebas se construye y publica la imagen
   build:
     name: Build Image
     needs: test
@@ -61,3 +62,88 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           build-args: |
             APP_ENV=${{ secrets.APP_ENV }}
+
+  # Análisis de código (SonarQube Cloud). No necesita la imagen: corre en paralelo a "build".
+  # Secrets requeridos: SONAR_TOKEN, SONAR_ORGANIZATION, SONAR_PROJECT_KEY
+  codeScan:
+    name: SonarCloud Scan
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
+      SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+    steps:
+      # Checklist: nunca fallar en silencio. Si falta algo, avisa de forma visible.
+      - name: Check requirements
+        id: check
+        run: |
+          if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_ORGANIZATION" ] || [ -z "$SONAR_PROJECT_KEY" ]; then
+            echo "::warning title=SonarCloud omitido::Faltan secrets: SONAR_TOKEN, SONAR_ORGANIZATION o SONAR_PROJECT_KEY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.check.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      # sonarcloud-github-action está archivada; sonarqube-scan-action es su reemplazo oficial
+      - name: SonarCloud Scan
+        if: steps.check.outputs.ready == 'true'
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+
+      - name: Get SonarCloud status
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            STATUS=$(curl -s -u "$SONAR_TOKEN:" "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" | jq -r '.projectStatus.status')
+            [ "$STATUS" != "NONE" ] && [ -n "$STATUS" ] && break
+            sleep 5
+          done
+          echo "SONAR_STATUS=$STATUS" >> "$GITHUB_ENV"
+
+      - name: Sonar Status
+        if: steps.check.outputs.ready == 'true'
+        run: echo "${{ env.SONAR_STATUS }}"
+
+      # Falla abierta por ahora (sonarTest.js tiene errores a propósito):
+      # para fallar cerrado, reemplazar el echo por "exit 1".
+      - name: Check Status
+        if: steps.check.outputs.ready == 'true' && env.SONAR_STATUS == 'ERROR'
+        run: echo "::warning title=Quality Gate::SonarCloud reportó ERROR (se deja pasar)"
+
+  # Análisis de dependencias/código (Snyk). Secret requerido: SNYK_TOKEN
+  security:
+    name: Snyk Security
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Check requirements
+        id: check
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "::warning title=Snyk omitido::Falta el secret SNYK_TOKEN"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.check.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Run Snyk to check for vulnerabilities
+        if: steps.check.outputs.ready == 'true'
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
