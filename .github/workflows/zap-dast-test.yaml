@@ -1,0 +1,43 @@
+name: dast-zap
+
+on:
+  push:
+    branches: ["main"]
+
+env:
+  REGISTRY: vladmazolski
+  IMAGE_NAME: rest_api
+
+jobs:
+  dast:
+    name: ZAP - DAST Test
+    runs-on: ubuntu-latest
+
+    # ZAP publica sus hallazgos como un Issue de GitHub
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # El proceso debe quedar en background (&); si no, el job nunca termina
+      - name: Run API
+        run: |
+          npm install
+          npm run dev &
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:3000/healthcheck >/dev/null && break
+            sleep 2
+          done
+
+      - name: ZAP Scan
+        uses: zaproxy/action-api-scan@v0.10.0
+        with:
+          target: "http://localhost:3000/search?q=123"
