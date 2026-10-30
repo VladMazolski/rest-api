@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-frontend-ingress
+  namespace: demo
+spec:
+  ingressClassName: nginx
+  rules:
+    # dominio local (resuelve a 127.0.0.1)
+    - host: demo-frontend.127.0.0.1.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-frontend
+                port:
+                  number: 8080
+    # sin host: acepta cualquier nombre (p. ej. la dirección pública del túnel de playit)
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-frontend
+                port:
+                  number: 8080
