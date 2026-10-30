@@ -147,3 +147,37 @@ jobs:
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  # Prueba de carga (Artillery) contra la imagen recién publicada. Falla si p95 >= 200ms o hay >2% de errores.
+  loadTest:
+    name: Load Testing
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          npm install -g artillery
+          npm install --save-dev artillery-plugin-ensure
+
+      - name: Run container
+        run: |
+          docker run -d --name rest-api -p 3000:3000 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          for _ in $(seq 1 30); do
+            curl -fs http://localhost:3000/healthcheck >/dev/null && exit 0
+            sleep 2
+          done
+          docker logs rest-api
+          exit 1
+
+      - name: Run Load Test
+        run: |
+          set -e  # Detiene el workflow si la prueba de carga falla.
+          artillery run loadTest/basic.yaml || exit 1
